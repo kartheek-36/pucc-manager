@@ -77,25 +77,68 @@ export default function AdminDashboardPage() {
       }
 
       if (json.success && json.data) {
+        const incomingData: AdminDashboardData = json.data;
+        const currentData = dataRef.current;
+
+        // STEP 5: NEVER CLEAR VALID STATE DURING REFRESH
+        // If current UI already displays submitted reports or collection for today,
+        // and an incoming refresh returns 0 submitted reports with 0 collection (e.g. from an uninitialized fallback or empty replica),
+        // we must NOT overwrite valid committed data!
+        if (
+          currentData &&
+          currentData.today.submitted_reports > 0 &&
+          incomingData.today.submitted_reports === 0 &&
+          incomingData.today.total_collection === 0
+        ) {
+          console.warn(
+            `[FRONTEND_DASHBOARD] REJECTED empty regression snapshot: preserving current valid state (submitted: ${currentData.today.submitted_reports}, collection: ₹${currentData.today.total_collection})`
+          );
+          return;
+        }
+
+        // Prevent regression of individual van SUBMITTED statuses to PENDING on background refreshes
+        if (currentData && currentData.today.date === incomingData.today.date) {
+          const mergedVans = incomingData.van_performance.map((inVan) => {
+            const curVan = currentData.van_performance.find((c) => c.van_id === inVan.van_id);
+            if (
+              curVan &&
+              (curVan.report_status === 'SUBMITTED' || curVan.report_status === 'APPROVED') &&
+              inVan.report_status === 'PENDING' &&
+              inVan.collection === 0
+            ) {
+              console.warn(`[FRONTEND_DASHBOARD] Preserving SUBMITTED status for van ${inVan.van_number}`);
+              return curVan;
+            }
+            return inVan;
+          });
+
+          const anyPreserved = mergedVans.some((v, idx) => v !== incomingData.van_performance[idx]);
+          if (anyPreserved) {
+            const totalCol = mergedVans.reduce((sum, v) => sum + v.collection, 0);
+            const totalTests = mergedVans.reduce((sum, v) => sum + v.tests, 0);
+            const submittedCount = mergedVans.filter((v) => v.report_status === 'SUBMITTED' || v.report_status === 'APPROVED').length;
+            incomingData.van_performance = mergedVans;
+            incomingData.today.total_collection = Math.max(incomingData.today.total_collection, totalCol);
+            incomingData.today.total_tests = Math.max(incomingData.today.total_tests, totalTests);
+            incomingData.today.submitted_reports = Math.max(incomingData.today.submitted_reports, submittedCount);
+            incomingData.today.pending_reports = Math.max(0, incomingData.today.total_vans - incomingData.today.submitted_reports);
+          }
+        }
+
         const stateAfter = {
-          collection: json.data.today.total_collection,
-          submitted: json.data.today.submitted_reports,
-          pending: json.data.today.pending_reports,
+          collection: incomingData.today.total_collection,
+          submitted: incomingData.today.submitted_reports,
+          pending: incomingData.today.pending_reports,
         };
 
         console.log(`[FRONTEND_DASHBOARD] #${requestId} SUCCESS in ${Date.now() - tStart}ms`, {
           trigger,
           stateBefore,
           stateAfter,
-          vanCount: json.data.van_performance?.length,
+          vanCount: incomingData.van_performance?.length,
         });
 
-        // Diagnostic alert if UI receives PENDING with 0 after previously having collection:
-        if (stateBefore && stateBefore.collection > 0 && stateAfter.collection === 0) {
-          console.error(`[FRONTEND_DASHBOARD] CRITICAL WARNING: State dropped from ₹${stateBefore.collection} to ₹0! Trigger=${trigger}`);
-        }
-
-        setData(json.data);
+        setData(incomingData);
       } else {
         console.warn(`[FRONTEND_DASHBOARD] #${requestId} Empty or error response`, json.error);
       }

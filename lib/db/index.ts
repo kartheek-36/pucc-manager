@@ -995,9 +995,10 @@ export async function getAdminDashboardMetrics(forDateStr?: string): Promise<Adm
   }
 
   // Earliest date required across today, yesterday, last 7 days, previous 7 days, and current month
-  const minRequiredDateStr = monthRange.start < prev7Days[prev7Days.length - 1]
+  const earliestRequiredDay = prev7Days[0] || last7Days[0] || targetDate;
+  const minRequiredDateStr = monthRange.start < earliestRequiredDay
     ? monthRange.start
-    : prev7Days[prev7Days.length - 1];
+    : earliestRequiredDay;
 
   const usePrisma = await checkPrismaConnection();
 
