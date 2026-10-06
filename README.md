@@ -105,12 +105,12 @@ Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 The system includes 1 Head Admin and 3 Van Operators:
 
-| Role | Name | Email | Password | Assigned Van |
-|---|---|---|---|---|
-| **ADMIN** | Venkateswara Rao | `admin@rtovan.com` | `7013669423@p` | All Vans (Fleet Owner) |
-| **VAN_OPERATOR** | Suresh Patil | `van1@rtovan.com` | `password123` | **Van 01** (`MH-12-PUC-1001`) |
-| **VAN_OPERATOR** | Manoj Jadhav | `van2@rtovan.com` | `password123` | **Van 02** (`MH-12-PUC-1002`) |
-| **VAN_OPERATOR** | Amit Deshmukh | `van3@rtovan.com` | `password123` | **Van 03** (`MH-12-PUC-1003`) |
+| Role | Name | Phone | Email | Password | Assigned Van |
+|---|---|---|---|---|---|
+| **ADMIN** | Venkateswara Rao | `7013669423` | `admin@rtovan.com` | `7013669423@p` | All Vans (Fleet Owner) |
+| **VAN_OPERATOR** | umamaheswarapucc | `9951537362` | `van1@rtovan.com` | `password123` | **Van 01** (`MH-12-PUC-1001`) |
+| **VAN_OPERATOR** | srisaipucc | `9951536848` | `van2@rtovan.com` | `password123` | **Van 02** (`MH-12-PUC-1002`) |
+| **VAN_OPERATOR** | srivenkateswarapucc | `9951537681` | `van3@rtovan.com` | `password123` | **Van 03** (`MH-12-PUC-1003`) |
 
 ---
 
