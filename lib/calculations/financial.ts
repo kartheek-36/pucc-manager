@@ -56,15 +56,28 @@ export function getTodayISTDateString(): string {
  * Convert any Date or ISO string to YYYY-MM-DD in Asia/Kolkata
  */
 export function toISTDateString(dateInput: Date | string): string {
-  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-  if (isNaN(d.getTime())) return getTodayISTDateString();
+  if (typeof dateInput === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+      return dateInput;
+    }
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return getTodayISTDateString();
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: TIMEZONE_IST,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return formatter.format(d);
+  }
+  if (isNaN(dateInput.getTime())) return getTodayISTDateString();
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: TIMEZONE_IST,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   });
-  return formatter.format(d);
+  return formatter.format(dateInput);
 }
 
 /**

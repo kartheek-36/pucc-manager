@@ -71,7 +71,7 @@ interface UseSyncListenerOptions {
  * Includes built-in burst debouncing / request coalescing to prevent redundant network calls.
  */
 export function useSyncListener(
-  onSync: () => void,
+  onSync: (trigger?: string) => void,
   options: UseSyncListenerOptions = {}
 ) {
   const {
@@ -84,20 +84,22 @@ export function useSyncListener(
   onSyncRef.current = onSync;
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingTriggerRef = useRef<string>('initial');
 
   useEffect(() => {
     // Coalesced trigger
-    const triggerSync = () => {
+    const triggerSync = (trigger: string) => {
+      pendingTriggerRef.current = trigger;
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
       debounceTimerRef.current = setTimeout(() => {
-        onSyncRef.current();
+        onSyncRef.current(pendingTriggerRef.current);
       }, debounceMs);
     };
 
     // 1. Initial invocation on mount
-    triggerSync();
+    triggerSync('initial');
 
     // 2. BroadcastChannel for cross-tab sync in same browser
     let broadcastChannel: BroadcastChannel | null = null;
@@ -105,7 +107,7 @@ export function useSyncListener(
       try {
         broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
         broadcastChannel.onmessage = () => {
-          triggerSync();
+          triggerSync('broadcast');
         };
       } catch (e) {
         // BroadcastChannel unavailable
@@ -114,18 +116,18 @@ export function useSyncListener(
 
     // 3. Same-window custom event listener
     const handleCustomSync = () => {
-      triggerSync();
+      triggerSync('custom-event');
     };
     window.addEventListener(CUSTOM_EVENT_NAME, handleCustomSync);
 
     // 4. Focus, visibility, and online events
     const handleVisibility = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        triggerSync();
+        triggerSync('visibility/focus');
       }
     };
     const handleOnline = () => {
-      triggerSync();
+      triggerSync('online');
     };
 
     window.addEventListener('focus', handleVisibility);
@@ -137,7 +139,7 @@ export function useSyncListener(
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
         return; // Don't poll in hidden tabs
       }
-      triggerSync();
+      triggerSync('interval-poll');
     }, intervalMs);
 
     // 6. Server-Sent Events (SSE) connection for instantaneous cross-browser server push
@@ -149,7 +151,7 @@ export function useSyncListener(
           try {
             const data = JSON.parse(event.data);
             if (data.type !== 'CONNECTED') {
-              triggerSync();
+              triggerSync(`sse:${data.type || 'push'}`);
             }
           } catch {
             // Ignore parse errors or heartbeat

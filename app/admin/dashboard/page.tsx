@@ -31,32 +31,87 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const inFlightRef = React.useRef(false);
+  const latestRequestIdRef = React.useRef(0);
+  const dataRef = React.useRef<AdminDashboardData | null>(null);
+  dataRef.current = data;
 
-  const fetchDashboard = React.useCallback(async (isBackground = false) => {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+  const fetchDashboard = React.useCallback(async (trigger = 'manual') => {
+    const requestId = ++latestRequestIdRef.current;
+    const isInitial = !dataRef.current;
+
+    // STEP 5: NEVER CLEAR VALID STATE DURING REFRESH
+    // If we already have valid data, keep it visible and set refreshing flag.
+    if (isInitial) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+
+    const tStart = Date.now();
+    const stateBefore = dataRef.current ? {
+      collection: dataRef.current.today.total_collection,
+      submitted: dataRef.current.today.submitted_reports,
+      pending: dataRef.current.today.pending_reports,
+    } : null;
+
+    console.log(`[FRONTEND_DASHBOARD] #${requestId} START trigger=${trigger}`, {
+      timestamp: new Date().toISOString(),
+      stateBefore,
+    });
+
     try {
-      if (!isBackground) setLoading(true);
-      else setRefreshing(true);
-
-      const res = await fetch('/api/admin/dashboard', { cache: 'no-store' });
+      const res = await fetch('/api/admin/dashboard', {
+        cache: 'no-store',
+        headers: {
+          'X-Request-Id': `fe_${requestId}_${tStart}`,
+          'X-Sync-Trigger': trigger,
+        },
+      });
       const json = await res.json();
-      if (json.success) {
+
+      // STEP 4: STALE RESPONSE PROTECTION / RACE CONDITION ELIMINATION
+      // If a newer request was dispatched while this one was in flight, discard this older response!
+      if (requestId !== latestRequestIdRef.current) {
+        console.warn(`[FRONTEND_DASHBOARD] #${requestId} DISCARDED stale response (current latest is #${latestRequestIdRef.current})`);
+        return;
+      }
+
+      if (json.success && json.data) {
+        const stateAfter = {
+          collection: json.data.today.total_collection,
+          submitted: json.data.today.submitted_reports,
+          pending: json.data.today.pending_reports,
+        };
+
+        console.log(`[FRONTEND_DASHBOARD] #${requestId} SUCCESS in ${Date.now() - tStart}ms`, {
+          trigger,
+          stateBefore,
+          stateAfter,
+          vanCount: json.data.van_performance?.length,
+        });
+
+        // Diagnostic alert if UI receives PENDING with 0 after previously having collection:
+        if (stateBefore && stateBefore.collection > 0 && stateAfter.collection === 0) {
+          console.error(`[FRONTEND_DASHBOARD] CRITICAL WARNING: State dropped from ₹${stateBefore.collection} to ₹0! Trigger=${trigger}`);
+        }
+
         setData(json.data);
+      } else {
+        console.warn(`[FRONTEND_DASHBOARD] #${requestId} Empty or error response`, json.error);
       }
     } catch (err) {
-      console.error('Failed to load admin dashboard:', err);
+      console.error(`[FRONTEND_DASHBOARD] #${requestId} Network error:`, err);
     } finally {
-      inFlightRef.current = false;
-      if (!isBackground) setLoading(false);
-      setRefreshing(false);
+      if (requestId === latestRequestIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   // Real-time synchronization across tabs, SSE server push, focus, and background polling
-  useSyncListener(() => {
-    fetchDashboard(Boolean(data));
+  useSyncListener((trigger) => {
+    fetchDashboard(trigger || 'sync-listener');
   }, { intervalMs: 6000 });
 
 
@@ -81,7 +136,7 @@ export default function AdminDashboardPage() {
           </div>
 
           <button
-            onClick={() => fetchDashboard(false)}
+            onClick={() => fetchDashboard('manual-button')}
             disabled={loading || refreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#FFFFFF] border border-[#E7E9ED] text-[#111827] hover:bg-[#F7F8FA] transition-colors"
           >

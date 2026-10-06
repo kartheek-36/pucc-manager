@@ -168,18 +168,28 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 let isDatabaseConnected: boolean | null = null;
+let lastDbError: string | null = null;
 
-async function checkPrismaConnection(): Promise<boolean> {
-  if (!process.env.DATABASE_URL) return false;
-  if (isDatabaseConnected !== null) return isDatabaseConnected;
+export async function checkPrismaConnection(): Promise<boolean> {
+  if (!process.env.DATABASE_URL) {
+    lastDbError = 'DATABASE_URL_ENV_VAR_NOT_FOUND';
+    return false;
+  }
   try {
     await prisma.$queryRaw`SELECT 1`;
     isDatabaseConnected = true;
+    lastDbError = null;
     return true;
-  } catch (err) {
+  } catch (err: any) {
     isDatabaseConnected = false;
+    lastDbError = err?.message || String(err);
+    console.error('[DB_CONNECTION_FAILURE]', lastDbError);
     return false;
   }
+}
+
+export function getLastDbError(): string | null {
+  return lastDbError;
 }
 
 // ======================== REPOSITORY METHODS ========================
