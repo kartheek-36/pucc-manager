@@ -77,7 +77,7 @@ async function main() {
   });
   const t_metrics = performance.now() - t1;
   console.log(`  ✓ Admin Metrics query latency: ${t_metrics.toFixed(2)}ms`);
-  console.log(`  ✓ Today's collection: ₹${todayMetrics._sum.total_collection?.toLocaleString('en-IN')}`);
+  console.log(`  ✓ Today's collection: ₹${Number(todayMetrics._sum.total_collection || 0).toLocaleString('en-IN')}`);
 
   // T2: Total UI roundtrip latency
   const totalSyncLatency = t_db + sseLatency + t_metrics;
