@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
+    "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
     "test": "tsx tests/business-logic.test.ts && tsx tests/cross-login-sync.test.ts && tsx tests/production-sync-bench.ts && tsx tests/e2e-cross-login-sync.ts",

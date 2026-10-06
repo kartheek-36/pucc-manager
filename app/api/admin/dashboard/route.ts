@@ -54,10 +54,12 @@ export async function GET(req: NextRequest) {
       durationMs,
     });
 
+    const sanitizedDbErr = (lastDbErr || 'none').replace(/[\r\n]+/g, ' ').substring(0, 100);
+
     return successResponse(data, 200, {
       'X-Request-Id': requestId,
       'X-DB-Source': isDbConnected ? 'PostgreSQL' : 'MemoryStoreFallback',
-      'X-DB-Error': lastDbErr || 'none',
+      'X-DB-Error': sanitizedDbErr,
     });
   } catch (error: any) {
     console.error(`[DIAGNOSTIC] ${requestId} 500 INTERNAL_ERROR`, error);
