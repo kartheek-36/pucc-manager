@@ -82,6 +82,12 @@ export default function AdminSettingsPage() {
                 <option value="21">09:00 PM (21:00)</option>
                 <option value="22">10:00 PM (22:00)</option>
               </select>
+              <button
+                onClick={() => toast(`Daily reporting deadline set to ${deadlineHour}:00 IST!`, 'success')}
+                className="px-3 py-1.5 rounded-lg bg-[#1D4ED8] hover:bg-[#1E40AF] text-white font-semibold text-xs transition-colors"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>

@@ -6,45 +6,35 @@ import { Bell } from 'lucide-react';
 import { getFirebaseMessagingClient } from '@/lib/firebase/client';
 import { getToken } from 'firebase/messaging';
 import { useToast } from '@/components/ui/Toast';
+import { useSyncListener } from '@/lib/sync/client';
 
 export function NotificationBell({ className = '' }: { className?: string }) {
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isSupported, setIsSupported] = useState(false);
   const { toast } = useToast();
 
-  const fetchUnreadCount = async () => {
+  const inFlightRef = React.useRef(false);
+
+  const fetchUnreadCount = React.useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      const res = await fetch('/api/notifications?unread=true');
+      const res = await fetch('/api/notifications?unread=true', { cache: 'no-store' });
       const data = await res.json();
       if (data.success) {
         setUnreadCount(data.data.unreadCount || 0);
       }
     } catch (e) {
       // Quiet fail
+    } finally {
+      inFlightRef.current = false;
     }
-  };
-
-  useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        return;
-      }
-      fetchUnreadCount();
-    }, 30000);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchUnreadCount();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
   }, []);
+
+  // Real-time synchronization on reports, mark-read, and active visibility
+  useSyncListener(() => {
+    fetchUnreadCount();
+  }, { intervalMs: 6000 });
 
   // Check if browser notifications are supported
   useEffect(() => {

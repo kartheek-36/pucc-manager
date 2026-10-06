@@ -4,6 +4,10 @@ import { getDailyReport, updateDailyReport, getVanById, createAuditLog } from '@
 import { calculateNetCollection, calculateTotalTests, getTodayISTDateString } from '@/lib/calculations/financial';
 import { notifyAdminOnReportSubmission } from '@/lib/notifications/service';
 import { successResponse, errorResponse } from '@/lib/api/response';
+import { broadcastServerSync } from '@/lib/sync/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(
   req: NextRequest,
@@ -115,24 +119,31 @@ export async function PATCH(
     });
 
     if (action === 'REPORT_UPDATED' && updated) {
-      (async () => {
-        try {
-          const van = await getVanById(updated.van_id);
-          if (van) {
-            await notifyAdminOnReportSubmission({
-              reportId: updated.id,
-              vanId: van.id,
-              vanNumber: van.van_number,
-              operatorName: auth.user.name,
-              totalCollection: updated.total_collection,
-              totalTests: updated.total_tests,
-              reportDate: updated.report_date,
-            });
-          }
-        } catch (e) {
-          console.error('Failed to notify admin on report update:', e);
+      try {
+        const van = await getVanById(updated.van_id);
+        if (van) {
+          await notifyAdminOnReportSubmission({
+            reportId: updated.id,
+            vanId: van.id,
+            vanNumber: van.van_number,
+            operatorName: auth.user.name,
+            totalCollection: updated.total_collection,
+            totalTests: updated.total_tests,
+            reportDate: updated.report_date,
+          });
         }
-      })();
+      } catch (e) {
+        console.warn('[Reports ID API] Non-fatal notification warning:', e);
+      }
+    }
+
+    if (updated) {
+      broadcastServerSync({
+        type: 'REPORT_UPDATED',
+        vanId: updated.van_id,
+        reportId: updated.id,
+        reportDate: updated.report_date,
+      });
     }
 
     return successResponse(updated);

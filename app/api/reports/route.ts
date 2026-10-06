@@ -5,6 +5,10 @@ import { dailyReportSchema } from '@/lib/validations/report';
 import { calculateNetCollection, calculateTotalTests } from '@/lib/calculations/financial';
 import { notifyAdminOnReportSubmission } from '@/lib/notifications/service';
 import { successResponse, errorResponse } from '@/lib/api/response';
+import { broadcastServerSync } from '@/lib/sync/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   try {
@@ -101,11 +105,11 @@ export async function POST(req: NextRequest) {
       status: 'SUBMITTED',
     });
 
-    // Trigger Admin Notification & FCM Push Notification asynchronously (does NOT block response!)
+    // 1. Authoritative notification creation & audit logging in PostgreSQL
     const clientIp = req.headers.get('x-forwarded-for') || '127.0.0.1';
-    (async () => {
-      try {
-        await notifyAdminOnReportSubmission({
+    try {
+      await Promise.allSettled([
+        notifyAdminOnReportSubmission({
           reportId: createdReport.id,
           vanId: van.id,
           vanNumber: van.van_number,
@@ -113,9 +117,8 @@ export async function POST(req: NextRequest) {
           totalCollection: createdReport.total_collection,
           totalTests: createdReport.total_tests,
           reportDate: createdReport.report_date,
-        });
-
-        await createAuditLog({
+        }),
+        createAuditLog({
           user_id: auth.user.id,
           action: 'REPORT_SUBMITTED',
           entity_type: 'DailyReport',
@@ -128,16 +131,28 @@ export async function POST(req: NextRequest) {
             date: createdReport.report_date,
           },
           ip_address: clientIp,
-        });
-      } catch (err) {
-        console.error('Asynchronous post-submission notification/audit failed:', err);
-      }
-    })();
+        }),
+      ]);
+    } catch (postErr) {
+      console.warn('[Reports API] Non-fatal notification/audit warning:', postErr);
+    }
+
+    // 2. Broadcast real-time synchronization event to all connected screens
+    broadcastServerSync({
+      type: 'REPORT_SUBMITTED',
+      vanId: van.id,
+      reportId: createdReport.id,
+      reportDate: createdReport.report_date,
+    });
 
     return successResponse(createdReport, 201);
   } catch (error: any) {
-    if (error.message.includes('already been submitted')) {
-      return errorResponse('DUPLICATE_REPORT', error.message, 409);
+    if (
+      error.message?.includes('already been submitted') ||
+      error.code === 'P2002' ||
+      error.message?.includes('Unique constraint')
+    ) {
+      return errorResponse('DUPLICATE_REPORT', 'A report for this van has already been submitted for this date', 409);
     }
     return errorResponse('INTERNAL_ERROR', error.message, 500);
   }

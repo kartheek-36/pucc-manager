@@ -3,6 +3,9 @@ import { authenticateRequest } from '@/lib/auth/session';
 import { getNotifications, getUnreadNotificationCount } from '@/lib/db';
 import { successResponse, errorResponse } from '@/lib/api/response';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await authenticateRequest(req);

@@ -7,6 +7,7 @@ import { formatINR } from '@/lib/calculations/financial';
 import { ArrowRight, User, Edit3, X } from 'lucide-react';
 import { VanCardSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { useSyncListener, broadcastClientSync } from '@/lib/sync/client';
 
 interface VanSummary {
   id: string;
@@ -35,22 +36,28 @@ export function AdminVansPageContent() {
   const [updating, setUpdating] = useState(false);
   const { toast } = useToast();
 
-  const fetchVans = async () => {
+  const inFlightRef = React.useRef(false);
+
+  const fetchVans = React.useCallback(async (isBackground = false) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      setLoading(true);
-      const res = await fetch('/api/admin/vans');
+      if (!isBackground) setLoading(true);
+      const res = await fetch('/api/admin/vans', { cache: 'no-store' });
       const json = await res.json();
       if (json.success) setVans(json.data);
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      inFlightRef.current = false;
+      if (!isBackground) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchVans();
   }, []);
+
+  // Real-time synchronization across tabs, SSE push, and active visibility
+  useSyncListener(() => {
+    fetchVans(vans.length > 0);
+  }, { intervalMs: 6000 });
 
   const handleEditClick = (van: VanSummary, e: React.MouseEvent) => {
     e.preventDefault();
@@ -74,6 +81,7 @@ export function AdminVansPageContent() {
       const json = await res.json();
       if (json.success) {
         toast(`Updated registration number for ${editingVan.van_number}!`, 'success');
+        broadcastClientSync({ type: 'VAN_UPDATED', vanId: editingVan.id });
         setEditingVan(null);
         fetchVans();
       } else {

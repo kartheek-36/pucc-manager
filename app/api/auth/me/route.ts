@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/session';
 import { successResponse, errorResponse } from '@/lib/api/response';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await authenticateRequest(req);

@@ -16,6 +16,7 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { getFirebaseMessagingClient } from '@/lib/firebase/client';
 import { getToken } from 'firebase/messaging';
+import { useSyncListener, broadcastClientSync } from '@/lib/sync/client';
 
 export default function AdminNotificationsPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -24,10 +25,14 @@ export default function AdminNotificationsPage() {
   const [enablingPush, setEnablingPush] = useState(false);
   const { toast } = useToast();
 
-  const fetchNotifications = async () => {
+  const inFlightRef = React.useRef(false);
+
+  const fetchNotifications = React.useCallback(async (isBackground = false) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      setLoading(true);
-      const res = await fetch(`/api/notifications?unread=${tab === 'unread'}`);
+      if (!isBackground) setLoading(true);
+      const res = await fetch(`/api/notifications?unread=${tab === 'unread'}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         setNotifications(json.data.notifications);
@@ -35,13 +40,15 @@ export default function AdminNotificationsPage() {
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      inFlightRef.current = false;
+      if (!isBackground) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchNotifications();
   }, [tab]);
+
+  // Real-time synchronization on reports, mark-read, and active visibility
+  useSyncListener(() => {
+    fetchNotifications(notifications.length > 0);
+  }, { intervalMs: 6000 });
 
   const handleMarkAsRead = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,6 +63,7 @@ export default function AdminNotificationsPage() {
         setNotifications((prev) =>
           prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
         );
+        broadcastClientSync({ type: 'NOTIFICATION_READ' });
         toast('Marked as read', 'info');
       }
     } catch {}
@@ -71,6 +79,7 @@ export default function AdminNotificationsPage() {
       const json = await res.json();
       if (json.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+        broadcastClientSync({ type: 'NOTIFICATION_READ' });
         toast('All notifications marked as read', 'success');
       }
     } catch {}

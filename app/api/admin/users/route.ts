@@ -3,6 +3,10 @@ import { authenticateRequest, requireAdmin, invalidateSessionCache } from '@/lib
 import { getAllUsers, updateUser, createUser, createAuditLog } from '@/lib/db';
 import { updateUserSchema, createUserSchema } from '@/lib/validations/auth';
 import { successResponse, errorResponse } from '@/lib/api/response';
+import { broadcastServerSync } from '@/lib/sync/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   try {
@@ -73,6 +77,11 @@ export async function PUT(req: NextRequest) {
     }
 
     invalidateSessionCache(id);
+
+    broadcastServerSync({
+      type: 'USER_UPDATED',
+      userId: id,
+    });
 
     await createAuditLog({
       user_id: auth.user.id,

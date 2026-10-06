@@ -8,6 +8,9 @@ import {
 } from '@/lib/calculations/financial';
 import { successResponse, errorResponse } from '@/lib/api/response';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -19,13 +22,14 @@ export async function GET(
     }
 
     const { id } = await params;
-    const van = await getVanById(id);
+    const [van, reports] = await Promise.all([
+      getVanById(id),
+      getReports({ van_id: id }),
+    ]);
 
     if (!van) {
       return errorResponse('NOT_FOUND', 'Van not found', 404);
     }
-
-    const reports = await getReports({ van_id: id });
     const last7Days = getLast7DaysIST();
     const monthRange = getCurrentMonthISTRange();
 

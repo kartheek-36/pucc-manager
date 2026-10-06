@@ -4,6 +4,9 @@ import { getReports, getVans } from '@/lib/db';
 import { roundTo2Decimals, getTodayISTDateString } from '@/lib/calculations/financial';
 import { successResponse, errorResponse } from '@/lib/api/response';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await authenticateRequest(req);

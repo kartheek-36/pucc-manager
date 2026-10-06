@@ -1,12 +1,28 @@
 import { NextResponse } from 'next/server';
 
-export function successResponse<T>(data: T, status = 200) {
+const NO_CACHE_HEADERS: Record<string, string> = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
+export function successResponse<T>(
+  data: T,
+  status = 200,
+  customHeaders?: Record<string, string>
+) {
   return NextResponse.json(
     {
       success: true,
       data,
     },
-    { status }
+    {
+      status,
+      headers: {
+        ...NO_CACHE_HEADERS,
+        ...(customHeaders || {}),
+      },
+    }
   );
 }
 
@@ -14,7 +30,8 @@ export function errorResponse(
   code: string,
   message: string,
   status = 400,
-  details?: any
+  details?: any,
+  customHeaders?: Record<string, string>
 ) {
   return NextResponse.json(
     {
@@ -25,6 +42,12 @@ export function errorResponse(
         ...(details ? { details } : {}),
       },
     },
-    { status }
+    {
+      status,
+      headers: {
+        ...NO_CACHE_HEADERS,
+        ...(customHeaders || {}),
+      },
+    }
   );
 }

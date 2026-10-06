@@ -8,6 +8,7 @@ import { VanPerformanceCards } from '@/components/dashboard/VanPerformanceCards'
 import { MetricCardSkeleton, ChartSkeleton } from '@/components/ui/Skeleton';
 import { AdminDashboardData } from '@/types';
 import { RefreshCw } from 'lucide-react';
+import { useSyncListener } from '@/lib/sync/client';
 
 // Dynamic imports for heavy recharts components to drastically reduce initial JS bundle size
 const TodayCollectionChart = dynamic(
@@ -30,12 +31,16 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchDashboard = async (isBackground = false) => {
+  const inFlightRef = React.useRef(false);
+
+  const fetchDashboard = React.useCallback(async (isBackground = false) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       if (!isBackground) setLoading(true);
       else setRefreshing(true);
 
-      const res = await fetch('/api/admin/dashboard');
+      const res = await fetch('/api/admin/dashboard', { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         setData(json.data);
@@ -43,37 +48,16 @@ export default function AdminDashboardPage() {
     } catch (err) {
       console.error('Failed to load admin dashboard:', err);
     } finally {
+      inFlightRef.current = false;
       if (!isBackground) setLoading(false);
-      else setRefreshing(false);
+      setRefreshing(false);
     }
-  };
-
-  useEffect(() => {
-    fetchDashboard(false);
-
-    // Auto-sync interval: checks for operator report submissions every 15 seconds when tab is active
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-        return; // Pause background polling
-      }
-      fetchDashboard(true);
-    }, 15000);
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        fetchDashboard(true);
-      }
-    };
-
-    window.addEventListener('focus', handleVisibility);
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleVisibility);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
   }, []);
+
+  // Real-time synchronization across tabs, SSE server push, focus, and background polling
+  useSyncListener(() => {
+    fetchDashboard(Boolean(data));
+  }, { intervalMs: 6000 });
 
 
   return (

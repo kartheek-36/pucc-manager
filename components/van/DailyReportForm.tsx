@@ -26,6 +26,7 @@ import {
 import Link from 'next/link';
 import { useToast } from '../ui/Toast';
 import { DailyReport, Van } from '@/types';
+import { broadcastClientSync } from '@/lib/sync/client';
 
 interface DailyReportFormProps {
   van: Van;
@@ -135,6 +136,7 @@ export function DailyReportForm({
   };
 
   const onSubmit = async (values: FormValues) => {
+    if (submitting) return;
     setSubmitting(true);
     try {
       const isUpdating = Boolean(existingReport?.id);
@@ -156,6 +158,12 @@ export function DailyReportForm({
 
       setJustSubmittedReport(json.data);
       toast(isUpdating ? 'Report updated successfully!' : '✓ Report submitted successfully!', 'success');
+      broadcastClientSync({
+        type: isUpdating ? 'REPORT_UPDATED' : 'REPORT_SUBMITTED',
+        vanId: van.id,
+        reportId: json.data?.id,
+        reportDate: values.report_date,
+      });
       if (onSubmitted) onSubmitted();
     } catch {
       toast('Network error while submitting report', 'error');

@@ -8,6 +8,7 @@ import { getTodayISTDateString } from '@/lib/calculations/financial';
 import { MetricCardSkeleton } from '@/components/ui/Skeleton';
 import { AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useSyncListener } from '@/lib/sync/client';
 
 export default function VanDailyReportPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -16,12 +17,12 @@ export default function VanDailyReportPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
       setErrorMessage(null);
 
-      const meRes = await fetch('/api/auth/me');
+      const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
       const meJson = await meRes.json();
       if (!meJson.success) {
         setErrorMessage('Failed to authenticate session');
@@ -37,7 +38,7 @@ export default function VanDailyReportPage() {
       }
 
       const todayStr = getTodayISTDateString();
-      const repRes = await fetch(`/api/reports/today?van_id=${vanId}&date=${todayStr}`);
+      const repRes = await fetch(`/api/reports/today?van_id=${vanId}&date=${todayStr}`, { cache: 'no-store' });
       const repJson = await repRes.json();
 
       if (repJson.success) {
@@ -52,11 +53,11 @@ export default function VanDailyReportPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
+
+  useSyncListener(() => {
+    loadData();
+  }, { intervalMs: 8000 });
 
   return (
     <VanLayout

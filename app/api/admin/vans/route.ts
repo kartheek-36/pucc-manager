@@ -9,6 +9,10 @@ import {
 } from '@/lib/calculations/financial';
 import { updateVanSchema } from '@/lib/validations/auth';
 import { successResponse, errorResponse } from '@/lib/api/response';
+import { broadcastServerSync } from '@/lib/sync/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   try {
@@ -98,6 +102,11 @@ export async function PUT(req: NextRequest) {
     }
 
     invalidateSessionCache();
+
+    broadcastServerSync({
+      type: 'VAN_UPDATED',
+      vanId: id,
+    });
 
     await createAuditLog({
       user_id: auth.user.id,

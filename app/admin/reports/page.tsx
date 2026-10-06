@@ -6,6 +6,7 @@ import { ReportsTable } from '@/components/reports/ReportsTable';
 import { DailyReport, Van } from '@/types';
 import { formatINR, getTodayISTDateString, getLast7DaysIST, getCurrentMonthISTRange } from '@/lib/calculations/financial';
 import { RefreshCw } from 'lucide-react';
+import { useSyncListener } from '@/lib/sync/client';
 
 export default function AdminReportsPage() {
   const [reports, setReports] = useState<DailyReport[]>([]);
@@ -20,14 +21,18 @@ export default function AdminReportsPage() {
 
   const fetchVans = async () => {
     try {
-      const res = await fetch('/api/admin/vans');
+      const res = await fetch('/api/admin/vans', { cache: 'no-store' });
       const json = await res.json();
       if (json.success) setVans(json.data);
     } catch {}
   };
 
-  const fetchReports = async () => {
-    setLoading(true);
+  const inFlightRef = React.useRef(false);
+
+  const fetchReports = React.useCallback(async (isBackground = false) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    if (!isBackground) setLoading(true);
     try {
       let start = '';
       let end = '';
@@ -54,7 +59,7 @@ export default function AdminReportsPage() {
       if (end) params.set('endDate', end);
       if (selectedVanId !== 'ALL') params.set('van_id', selectedVanId);
 
-      const res = await fetch(`/api/reports?${params.toString()}`);
+      const res = await fetch(`/api/reports?${params.toString()}`, { cache: 'no-store' });
       const json = await res.json();
       if (json.success) {
         setReports(json.data);
@@ -62,17 +67,19 @@ export default function AdminReportsPage() {
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      inFlightRef.current = false;
+      if (!isBackground) setLoading(false);
     }
-  };
+  }, [filterType, selectedVanId, customStart, customEnd]);
 
   useEffect(() => {
     fetchVans();
   }, []);
 
-  useEffect(() => {
-    fetchReports();
-  }, [filterType, selectedVanId, customStart, customEnd]);
+  // Real-time synchronization on submission, updates, and active window changes
+  useSyncListener(() => {
+    fetchReports(reports.length > 0);
+  }, { intervalMs: 6000 });
 
   // Aggregate Totals
   const totalCollection = reports.reduce((acc, r) => acc + r.total_collection, 0);
@@ -95,7 +102,7 @@ export default function AdminReportsPage() {
           </div>
 
           <button
-            onClick={fetchReports}
+            onClick={() => fetchReports(false)}
             className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#FFFFFF] border border-[#E7E9ED] text-[#111827] hover:bg-[#F7F8FA]"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />

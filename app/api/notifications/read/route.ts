@@ -2,6 +2,10 @@ import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/session';
 import { markNotificationRead, markAllNotificationsRead } from '@/lib/db';
 import { successResponse, errorResponse } from '@/lib/api/response';
+import { broadcastServerSync } from '@/lib/sync/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,6 +18,7 @@ export async function POST(req: NextRequest) {
 
     if (body.markAll) {
       const count = await markAllNotificationsRead(auth.user.id);
+      broadcastServerSync({ type: 'NOTIFICATION_READ', userId: auth.user.id });
       return successResponse({ count, message: 'All notifications marked as read' });
     }
 
@@ -22,6 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     const success = await markNotificationRead(body.id, auth.user.id);
+    broadcastServerSync({ type: 'NOTIFICATION_READ', userId: auth.user.id });
     return successResponse({ success });
   } catch (error: any) {
     return errorResponse('INTERNAL_ERROR', error.message, 500);

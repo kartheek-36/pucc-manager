@@ -13,6 +13,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { MetricCardSkeleton } from '@/components/ui/Skeleton';
+import { useSyncListener } from '@/lib/sync/client';
 
 export default function VanDashboardPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -23,13 +24,17 @@ export default function VanDashboardPage() {
 
   const todayStr = getTodayISTDateString();
 
-  const loadData = async () => {
+  const inFlightRef = React.useRef(false);
+
+  const loadData = React.useCallback(async (isBackground = false) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
-      setLoading(true);
+      if (!isBackground) setLoading(true);
       const [meRes, repRes, histRes] = await Promise.all([
-        fetch('/api/auth/me'),
-        fetch('/api/reports/today'),
-        fetch('/api/reports?limit=7'),
+        fetch('/api/auth/me', { cache: 'no-store' }),
+        fetch('/api/reports/today', { cache: 'no-store' }),
+        fetch('/api/reports?limit=7', { cache: 'no-store' }),
       ]);
 
       const [meJson, repJson, histJson] = await Promise.all([
@@ -51,13 +56,15 @@ export default function VanDashboardPage() {
     } catch (e) {
       console.error('Failed to load van dashboard data:', e);
     } finally {
-      setLoading(false);
+      inFlightRef.current = false;
+      if (!isBackground) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
+
+  // Real-time synchronization on submission, van reassignment, and active visibility
+  useSyncListener(() => {
+    loadData(Boolean(user));
+  }, { intervalMs: 6000 });
 
   // Calculate week total from recent reports (last 7 days)
   const weekCollection = recentReports.reduce((acc, r) => acc + r.total_collection, 0);
