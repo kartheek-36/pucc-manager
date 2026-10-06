@@ -1,0 +1,153 @@
+// Prisma schema for RTO Pollution Van Manager
+// Designed for PostgreSQL (Neon, Supabase, Local PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  VAN_OPERATOR
+}
+
+enum VanStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  firebase_uid String        @unique
+  name         String
+  email        String        @unique
+  phone        String?
+  role         Role          @default(VAN_OPERATOR)
+  van_id       String?       @unique
+  is_active    Boolean       @default(true)
+  created_at   DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime      @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  van           Van?          @relation("OperatorVan", fields: [van_id], references: [id])
+  managed_van   Van?          @relation("VanOperator")
+  daily_reports DailyReport[]
+  notifications Notification[]
+  device_tokens DeviceToken[]
+  audit_logs    AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Van {
+  id                  String        @id @default(uuid())
+  van_number          String        @unique // e.g. "Van 01", "Van 02", "Van 03"
+  registration_number String        // e.g. "MH-12-DE-1001"
+  operator_id         String?       @unique
+  status              VanStatus     @default(ACTIVE)
+  created_at          DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime      @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  operator      User?         @relation("VanOperator", fields: [operator_id], references: [id])
+  assigned_user User?         @relation("OperatorVan")
+  daily_reports DailyReport[]
+
+  @@index([status])
+}
+
+model DailyReport {
+  id               String       @id @default(uuid())
+  report_date      DateTime     @db.Date
+  van_id           String
+  operator_id      String
+  petrol_tests     Int          @default(0)
+  diesel_tests     Int          @default(0)
+  other_tests      Int          @default(0)
+  total_tests      Int          @default(0)
+  total_collection Decimal      @default(0.00) @db.Decimal(12, 2)
+  expenses         Decimal      @default(0.00) @db.Decimal(12, 2)
+  net_collection   Decimal      @default(0.00) @db.Decimal(12, 2)
+  notes            String?      @db.Text
+  submitted_at     DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime     @updatedAt @db.Timestamptz(6)
+  status           ReportStatus @default(SUBMITTED)
+
+  // Relations
+  van      Van  @relation(fields: [van_id], references: [id], onDelete: Cascade)
+  operator User @relation(fields: [operator_id], references: [id], onDelete: Restrict)
+
+  @@unique([van_id, report_date], name: "van_report_date_unique")
+  @@index([report_date])
+  @@index([van_id])
+  @@index([operator_id])
+  @@index([status])
+  @@index([van_id, report_date])
+  @@index([operator_id, report_date])
+  @@index([status, report_date])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  user_id    String
+  title      String
+  message    String
+  type       String   @default("DAILY_REPORT_SUBMITTED") // DAILY_REPORT_SUBMITTED, DAILY_REPORT_PENDING, SYSTEM
+  metadata   Json?    @db.JsonB
+  is_read    Boolean  @default(false)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_read])
+  @@index([user_id, created_at])
+  @@index([created_at])
+}
+
+model DeviceToken {
+  id         String   @id @default(uuid())
+  user_id    String
+  token      String   @unique
+  platform   String?  @default("web")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([token])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  user_id     String?
+  action      String   // LOGIN, REPORT_CREATED, REPORT_UPDATED, REPORT_SUBMITTED, REPORT_APPROVED, REPORT_REJECTED, USER_CREATED, USER_UPDATED, VAN_UPDATED, NOTIFICATION_SENT
+  entity_type String   // DailyReport, Van, User, Notification, System
+  entity_id   String?
+  metadata    Json?    @db.JsonB
+  ip_address  String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  // Relations
+  user User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([created_at])
+  @@index([action])
+  @@index([user_id])
+}
