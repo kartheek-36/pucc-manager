@@ -7,7 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("postgresql://postgres:Bella%401988@localhost:5432/puc_db?schema=public")
 }
 
 enum Role {
