@@ -1,15 +1,29 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { TodayMetricsCards } from '@/components/dashboard/TodayMetricsCards';
 import { VanPerformanceCards } from '@/components/dashboard/VanPerformanceCards';
-import { TodayCollectionChart } from '@/components/charts/TodayCollectionChart';
-import { WeeklyOverviewChart } from '@/components/charts/WeeklyOverviewChart';
-import { MonthlyOverviewChart } from '@/components/charts/MonthlyOverviewChart';
 import { MetricCardSkeleton, ChartSkeleton } from '@/components/ui/Skeleton';
 import { AdminDashboardData } from '@/types';
 import { RefreshCw } from 'lucide-react';
+
+// Dynamic imports for heavy recharts components to drastically reduce initial JS bundle size
+const TodayCollectionChart = dynamic(
+  () => import('@/components/charts/TodayCollectionChart').then((m) => m.TodayCollectionChart),
+  { loading: () => <ChartSkeleton />, ssr: false }
+);
+
+const WeeklyOverviewChart = dynamic(
+  () => import('@/components/charts/WeeklyOverviewChart').then((m) => m.WeeklyOverviewChart),
+  { loading: () => <ChartSkeleton />, ssr: false }
+);
+
+const MonthlyOverviewChart = dynamic(
+  () => import('@/components/charts/MonthlyOverviewChart').then((m) => m.MonthlyOverviewChart),
+  { loading: () => <ChartSkeleton />, ssr: false }
+);
 
 export default function AdminDashboardPage() {
   const [data, setData] = useState<AdminDashboardData | null>(null);
@@ -37,19 +51,27 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     fetchDashboard(false);
 
-    // Auto-sync interval: checks for operator report submissions every 15 seconds
+    // Auto-sync interval: checks for operator report submissions every 15 seconds when tab is active
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return; // Pause background polling
+      }
       fetchDashboard(true);
     }, 15000);
 
-    const handleFocus = () => {
-      fetchDashboard(true);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboard(true);
+      }
     };
-    window.addEventListener('focus', handleFocus);
+
+    window.addEventListener('focus', handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('focus', handleVisibility);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 

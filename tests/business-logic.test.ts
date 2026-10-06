@@ -30,6 +30,7 @@ import {
 
 import { canAccessVan, requireAdmin, AuthContext } from '../lib/auth/session';
 import { checkAndNotifyPendingReports } from '../lib/notifications/service';
+import { prisma } from '../lib/db/prisma';
 
 let totalTestsRun = 0;
 let passedTests = 0;
@@ -111,16 +112,16 @@ async function runAllTests() {
   {
     const vans = await getVans();
     assert(vans.length === 3, 'Exactly 3 vans exist in database');
-    assert(vans.some((v) => v.van_number === 'Van 01'), 'Van 01 is present');
-    assert(vans.some((v) => v.van_number === 'Van 02'), 'Van 02 is present');
-    assert(vans.some((v) => v.van_number === 'Van 03'), 'Van 03 is present');
+    assert(vans.some((v) => v.van_number === 'umamaheswara' || v.van_number === 'Van 01'), 'Van 1 is present');
+    assert(vans.some((v) => v.van_number === 'srisai' || v.van_number === 'Van 02'), 'Van 2 is present');
+    assert(vans.some((v) => v.van_number === 'srivenkateswara' || v.van_number === 'Van 03'), 'Van 3 is present');
   }
 
   // TEST SUITE 5: Duplicate Daily Report Prevention
   console.log('\n▶ Test Suite 5: Duplicate Report Prevention Constraint');
   {
     const testDate = `20${Math.floor(Math.random() * 50 + 45)}-01-01`;
-    const van1 = (await getVans()).find((v) => v.van_number === 'Van 01')!;
+    const van1 = (await getVans()).find((v) => v.van_number === 'umamaheswara' || v.van_number === 'Van 01')!;
     const op1 = (await getUserByEmail('van1@rtovan.com'))!;
 
     // 1st submission succeeds
@@ -162,6 +163,11 @@ async function runAllTests() {
       }
     }
     assert(duplicateCaught === true, 'Duplicate report for (van_id, report_date) was rejected');
+
+    // Clean up test report to keep DB pristine
+    if (rep1 && rep1.id && process.env.DATABASE_URL) {
+      await prisma.dailyReport.delete({ where: { id: rep1.id } }).catch(() => {});
+    }
   }
 
   // TEST SUITE 6: Dashboard Metrics Aggregation
@@ -225,7 +231,7 @@ async function runAllTests() {
   console.log('\n▶ Test Suite 9: Bidirectional User <-> Van Sync');
   {
     // 1. Create a new operator assigned to Van 03
-    const van3 = (await getVans()).find((v) => v.van_number === 'Van 03')!;
+    const van3 = (await getVans()).find((v) => v.van_number === 'srivenkateswara' || v.van_number === 'Van 03')!;
     const testEmail = `sync_test_${Date.now()}@rtovan.com`;
     const newOp = await createUser({
       name: 'Sync Test Operator',
@@ -241,7 +247,7 @@ async function runAllTests() {
     assert(updatedVan3 !== null && updatedVan3.operator_id === newOp.id, 'Van 03 operator_id was bidirectionally synced to new operator');
 
     // 2. Reassign this operator to Van 01 using updateUser
-    const van1 = (await getVans()).find((v) => v.van_number === 'Van 01')!;
+    const van1 = (await getVans()).find((v) => v.van_number === 'umamaheswara' || v.van_number === 'Van 01')!;
     const updatedOp = await updateUser(newOp.id, { van_id: van1.id });
     assert(updatedOp !== null && updatedOp.van_id === van1.id, 'Operator van_id updated to Van 01');
 
@@ -264,6 +270,11 @@ async function runAllTests() {
     await updateUser(origOp1.id, { van_id: van1.id });
     const origOp3 = (await getUserByEmail('van3@rtovan.com'))!;
     await updateUser(origOp3.id, { van_id: van3.id });
+
+    // Clean up test operator to keep DB pristine
+    if (newOp && newOp.id && process.env.DATABASE_URL) {
+      await prisma.user.delete({ where: { id: newOp.id } }).catch(() => {});
+    }
   }
 
 

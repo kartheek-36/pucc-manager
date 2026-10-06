@@ -41,7 +41,7 @@ const INITIAL_ADMIN: User = {
 const INITIAL_VANS: Van[] = [
   {
     id: 'b0000000-0000-0000-0000-000000000001',
-    van_number: 'Van 01',
+    van_number: 'umamaheswara',
     registration_number: 'MH-12-PUC-1001',
     operator_id: 'c0000000-0000-0000-0000-000000000001',
     status: 'ACTIVE',
@@ -50,7 +50,7 @@ const INITIAL_VANS: Van[] = [
   },
   {
     id: 'b0000000-0000-0000-0000-000000000002',
-    van_number: 'Van 02',
+    van_number: 'srisai',
     registration_number: 'MH-12-PUC-1002',
     operator_id: 'c0000000-0000-0000-0000-000000000002',
     status: 'ACTIVE',
@@ -59,7 +59,7 @@ const INITIAL_VANS: Van[] = [
   },
   {
     id: 'b0000000-0000-0000-0000-000000000003',
-    van_number: 'Van 03',
+    van_number: 'srivenkateswara',
     registration_number: 'MH-12-PUC-1003',
     operator_id: 'c0000000-0000-0000-0000-000000000003',
     status: 'ACTIVE',
@@ -72,7 +72,7 @@ const INITIAL_OPERATORS: User[] = [
   {
     id: 'c0000000-0000-0000-0000-000000000001',
     firebase_uid: 'firebase_van1_uid',
-    name: 'umamaheswarapucc',
+    name: 'umamaheswara',
     email: 'van1@rtovan.com',
     phone: '9951537362',
     role: 'VAN_OPERATOR',
@@ -84,7 +84,7 @@ const INITIAL_OPERATORS: User[] = [
   {
     id: 'c0000000-0000-0000-0000-000000000002',
     firebase_uid: 'firebase_van2_uid',
-    name: 'srisaipucc',
+    name: 'srisai',
     email: 'van2@rtovan.com',
     phone: '9951536848',
     role: 'VAN_OPERATOR',
@@ -96,7 +96,7 @@ const INITIAL_OPERATORS: User[] = [
   {
     id: 'c0000000-0000-0000-0000-000000000003',
     firebase_uid: 'firebase_van3_uid',
-    name: 'srivenkateswarapucc',
+    name: 'srivenkateswara',
     email: 'van3@rtovan.com',
     phone: '9951537681',
     role: 'VAN_OPERATOR',
@@ -971,8 +971,89 @@ export async function getReports(filters?: {
 
 export async function getAdminDashboardMetrics(forDateStr?: string): Promise<AdminDashboardData> {
   const targetDate = forDateStr || getTodayISTDateString();
-  const vans = await getVans();
-  const allReports = await getReports();
+  const yesterdayDate = getYesterdayISTDateString(targetDate);
+  const last7Days = getLast7DaysIST();
+  const monthRange = getCurrentMonthISTRange();
+
+  // Previous 7 days (7 to 13 days prior to targetDate)
+  const prev7Days: string[] = [];
+  const [ty, tm, td] = targetDate.split('-').map(Number);
+  for (let i = 13; i >= 7; i--) {
+    const cur = new Date(Date.UTC(ty, tm - 1, td));
+    cur.setUTCDate(cur.getUTCDate() - i);
+    prev7Days.push(cur.toISOString().split('T')[0]);
+  }
+
+  // Earliest date required across today, yesterday, last 7 days, previous 7 days, and current month
+  const minRequiredDateStr = monthRange.start < prev7Days[prev7Days.length - 1]
+    ? monthRange.start
+    : prev7Days[prev7Days.length - 1];
+
+  const usePrisma = await checkPrismaConnection();
+
+  // Run Vans and Scoped Reports in PARALLEL with minimal field projection
+  const [vans, allReports] = await Promise.all([
+    getVans(),
+    usePrisma
+      ? prisma.dailyReport
+          .findMany({
+            where: {
+              report_date: {
+                gte: new Date(minRequiredDateStr),
+              },
+            },
+            select: {
+              id: true,
+              report_date: true,
+              van_id: true,
+              operator_id: true,
+              petrol_tests: true,
+              diesel_tests: true,
+              other_tests: true,
+              total_tests: true,
+              total_collection: true,
+              expenses: true,
+              net_collection: true,
+              status: true,
+              submitted_at: true,
+            },
+            orderBy: { report_date: 'desc' },
+          })
+          .then((rows) =>
+            rows.map((r: any) => ({
+              id: r.id,
+              report_date: toISTDateString(r.report_date),
+              van_id: r.van_id,
+              operator_id: r.operator_id,
+              petrol_tests: r.petrol_tests,
+              diesel_tests: r.diesel_tests,
+              other_tests: r.other_tests,
+              total_tests: r.total_tests,
+              total_collection: Number(r.total_collection),
+              expenses: Number(r.expenses),
+              net_collection: Number(r.net_collection),
+              status: r.status,
+              submitted_at: r.submitted_at.toISOString(),
+            }))
+          )
+      : Array.from(globalStore.reports.values())
+          .filter((r) => r.report_date >= minRequiredDateStr)
+          .map((r) => ({
+            id: r.id,
+            report_date: r.report_date,
+            van_id: r.van_id,
+            operator_id: r.operator_id,
+            petrol_tests: r.petrol_tests,
+            diesel_tests: r.diesel_tests,
+            other_tests: r.other_tests,
+            total_tests: r.total_tests,
+            total_collection: r.total_collection,
+            expenses: r.expenses,
+            net_collection: r.net_collection,
+            status: r.status,
+            submitted_at: r.submitted_at,
+          })),
+  ]);
 
   // 1. TODAY'S METRICS
   const todayReports = allReports.filter((r) => r.report_date === targetDate);
@@ -994,7 +1075,6 @@ export async function getAdminDashboardMetrics(forDateStr?: string): Promise<Adm
   }
 
   // Yesterday comparison
-  const yesterdayDate = getYesterdayISTDateString(targetDate);
   const yesterdayReports = allReports.filter((r) => r.report_date === yesterdayDate);
   const yesterdayTotalCollection = yesterdayReports.reduce((acc, r) => acc + r.total_collection, 0);
   const vsYesterday = calculatePercentageChange(todayTotalCollection, yesterdayTotalCollection);
@@ -1023,7 +1103,6 @@ export async function getAdminDashboardMetrics(forDateStr?: string): Promise<Adm
   });
 
   // 3. WEEKLY OVERVIEW (Last 7 Days)
-  const last7Days = getLast7DaysIST();
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const weeklyDays = last7Days.map((dateStr) => {
@@ -1043,9 +1122,9 @@ export async function getAdminDashboardMetrics(forDateStr?: string): Promise<Adm
       expenses += r.expenses;
       tests += r.total_tests;
       const van = vans.find((v) => v.id === r.van_id);
-      if (van?.van_number === 'Van 01') van1Col += r.total_collection;
-      if (van?.van_number === 'Van 02') van2Col += r.total_collection;
-      if (van?.van_number === 'Van 03') van3Col += r.total_collection;
+      if (van?.van_number === 'umamaheswara' || van?.van_number === 'Van 01' || van?.id === 'b0000000-0000-0000-0000-000000000001') van1Col += r.total_collection;
+      if (van?.van_number === 'srisai' || van?.van_number === 'Van 02' || van?.id === 'b0000000-0000-0000-0000-000000000002') van2Col += r.total_collection;
+      if (van?.van_number === 'srivenkateswara' || van?.van_number === 'sri venkateswara' || van?.van_number === 'Van 03' || van?.id === 'b0000000-0000-0000-0000-000000000003') van3Col += r.total_collection;
     }
 
     return {
@@ -1074,13 +1153,17 @@ export async function getAdminDashboardMetrics(forDateStr?: string): Promise<Adm
   }
 
   // Find best van in the week
+  const van1 = vans.find((v) => v.id === 'b0000000-0000-0000-0000-000000000001') || vans[0];
+  const van2 = vans.find((v) => v.id === 'b0000000-0000-0000-0000-000000000002') || vans[1];
+  const van3 = vans.find((v) => v.id === 'b0000000-0000-0000-0000-000000000003') || vans[2];
+
   const vanWeeklyTotals: Record<string, number> = {};
   for (const day of weeklyDays) {
-    vanWeeklyTotals['Van 01'] = (vanWeeklyTotals['Van 01'] || 0) + (day.van_01_collection || 0);
-    vanWeeklyTotals['Van 02'] = (vanWeeklyTotals['Van 02'] || 0) + (day.van_02_collection || 0);
-    vanWeeklyTotals['Van 03'] = (vanWeeklyTotals['Van 03'] || 0) + (day.van_03_collection || 0);
+    if (van1) vanWeeklyTotals[van1.van_number] = (vanWeeklyTotals[van1.van_number] || 0) + (day.van_01_collection || 0);
+    if (van2) vanWeeklyTotals[van2.van_number] = (vanWeeklyTotals[van2.van_number] || 0) + (day.van_02_collection || 0);
+    if (van3) vanWeeklyTotals[van3.van_number] = (vanWeeklyTotals[van3.van_number] || 0) + (day.van_03_collection || 0);
   }
-  let bestVanName = 'Van 01';
+  let bestVanName = van1?.van_number || 'umamaheswara';
   let bestVanAmount = 0;
   for (const [vanNum, col] of Object.entries(vanWeeklyTotals)) {
     if (col > bestVanAmount) {
@@ -1107,21 +1190,13 @@ export async function getAdminDashboardMetrics(forDateStr?: string): Promise<Adm
     ...item,
   }));
 
-  // Week vs previous week comparison
-  const prev7Days: string[] = [];
-  const [ty, tm, td] = targetDate.split('-').map(Number);
-  for (let i = 13; i >= 7; i--) {
-    const cur = new Date(Date.UTC(ty, tm - 1, td));
-    cur.setUTCDate(cur.getUTCDate() - i);
-    prev7Days.push(cur.toISOString().split('T')[0]);
-  }
+  // Week vs previous week comparison (uses pre-calculated prev7Days)
   const prevWeekCollection = allReports
     .filter((r) => prev7Days.includes(r.report_date))
     .reduce((acc, r) => acc + r.total_collection, 0);
   const vsPrevWeek = calculatePercentageChange(weeklyTotalCollection, prevWeekCollection);
 
-  // 4. MONTHLY OVERVIEW
-  const monthRange = getCurrentMonthISTRange();
+  // 4. MONTHLY OVERVIEW (uses pre-calculated monthRange)
   const monthReports = allReports.filter(
     (r) => r.report_date >= monthRange.start && r.report_date <= monthRange.end
   );
@@ -1154,7 +1229,7 @@ export async function getAdminDashboardMetrics(forDateStr?: string): Promise<Adm
       monthVanTotals[v.van_number] = (monthVanTotals[v.van_number] || 0) + r.total_collection;
     }
   }
-  let monthBestVan = 'Van 02';
+  let monthBestVan = vans[1]?.van_number || 'srisai';
   let monthBestVanCol = 0;
   for (const [vName, col] of Object.entries(monthVanTotals)) {
     if (col > monthBestVanCol) {
@@ -1279,7 +1354,18 @@ export async function getNotifications(
     const list = await prisma.notification.findMany({
       where,
       orderBy: { created_at: 'desc' },
-      take: 100,
+      take: unreadOnly ? 20 : 50,
+      select: {
+        id: true,
+        user_id: true,
+        title: true,
+        message: true,
+        type: true,
+        metadata: true,
+        is_read: true,
+        created_at: true,
+        updated_at: true,
+      },
     });
     return list.map((n: any) => ({
       ...n,
@@ -1293,6 +1379,67 @@ export async function getNotifications(
     .filter((n: NotificationItem) => n.user_id === userId && (!unreadOnly || !n.is_read))
     .sort((a: NotificationItem, b: NotificationItem) => b.created_at.localeCompare(a.created_at));
   return list;
+}
+
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  const usePrisma = await checkPrismaConnection();
+  if (usePrisma) {
+    return prisma.notification.count({
+      where: { user_id: userId, is_read: false },
+    });
+  }
+
+  let count = 0;
+  for (const notif of globalStore.notifications.values()) {
+    if (notif.user_id === userId && !notif.is_read) {
+      count++;
+    }
+  }
+  return count;
+}
+
+export async function getActiveAdminUsers(): Promise<{ id: string; name: string; email: string }[]> {
+  const usePrisma = await checkPrismaConnection();
+  if (usePrisma) {
+    return prisma.user.findMany({
+      where: { role: 'ADMIN', is_active: true },
+      select: { id: true, name: true, email: true },
+    });
+  }
+
+  return Array.from(globalStore.users.values())
+    .filter((u) => u.role === 'ADMIN' && u.is_active)
+    .map((u) => ({ id: u.id, name: u.name, email: u.email }));
+}
+
+export async function createNotificationsBatch(
+  items: Array<{
+    user_id: string;
+    title: string;
+    message: string;
+    type: string;
+    metadata?: any;
+  }>
+): Promise<number> {
+  if (items.length === 0) return 0;
+  const usePrisma = await checkPrismaConnection();
+  if (usePrisma) {
+    const result = await prisma.notification.createMany({
+      data: items.map((item) => ({
+        user_id: item.user_id,
+        title: item.title,
+        message: item.message,
+        type: item.type,
+        metadata: item.metadata ?? {},
+      })),
+    });
+    return result.count;
+  }
+
+  for (const item of items) {
+    await createNotification(item);
+  }
+  return items.length;
 }
 
 export async function markNotificationRead(id: string, userId: string): Promise<boolean> {

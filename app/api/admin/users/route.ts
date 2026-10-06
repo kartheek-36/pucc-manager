@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { authenticateRequest, requireAdmin } from '@/lib/auth/session';
+import { authenticateRequest, requireAdmin, invalidateSessionCache } from '@/lib/auth/session';
 import { getAllUsers, updateUser, createUser, createAuditLog } from '@/lib/db';
 import { updateUserSchema, createUserSchema } from '@/lib/validations/auth';
 import { successResponse, errorResponse } from '@/lib/api/response';
@@ -71,6 +71,8 @@ export async function PUT(req: NextRequest) {
     if (!updated) {
       return errorResponse('NOT_FOUND', 'User not found', 404);
     }
+
+    invalidateSessionCache(id);
 
     await createAuditLog({
       user_id: auth.user.id,

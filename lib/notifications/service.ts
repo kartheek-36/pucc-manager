@@ -1,7 +1,7 @@
 import {
-  createNotification,
   getAdminDeviceTokens,
-  getAllUsers,
+  getActiveAdminUsers,
+  createNotificationsBatch,
   getVans,
   getReports,
   createAuditLog,
@@ -33,30 +33,31 @@ export async function notifyAdminOnReportSubmission(params: {
   const title = 'Daily Report Received';
   const body = `${vanNumber} submitted today's report.\nCollection: ${formatINR(totalCollection)}\nTests: ${totalTests}`;
 
-  // 1. Get all admin users
-  const allUsers = await getAllUsers();
-  const admins = allUsers.filter((u) => u.role === 'ADMIN' && u.is_active);
+  // 1. Fetch active admins and device tokens in PARALLEL
+  const [admins, adminTokens] = await Promise.all([
+    getActiveAdminUsers(),
+    getAdminDeviceTokens(),
+  ]);
 
-  // 2. Create in-app notifications in PostgreSQL for each admin
-  for (const admin of admins) {
-    await createNotification({
-      user_id: admin.id,
-      title,
-      message: body,
-      type: 'DAILY_REPORT_SUBMITTED',
-      metadata: {
-        reportId,
-        vanId,
-        vanNumber,
-        reportDate,
-        collection: totalCollection,
-        tests: totalTests,
-      },
-    });
+  // 2. Batch create in-app notifications in PostgreSQL for each admin
+  if (admins.length > 0) {
+    await createNotificationsBatch(
+      admins.map((admin) => ({
+        user_id: admin.id,
+        title,
+        message: body,
+        type: 'DAILY_REPORT_SUBMITTED',
+        metadata: {
+          reportId,
+          vanId,
+          vanNumber,
+          reportDate,
+          collection: totalCollection,
+          tests: totalTests,
+        },
+      }))
+    );
   }
-
-  // 3. Send FCM push notifications to all registered admin devices
-  const adminTokens = await getAdminDeviceTokens();
   if (adminTokens.length > 0) {
     await sendMulticastNotification(adminTokens, {
       title,
@@ -94,32 +95,34 @@ export async function checkAndNotifyPendingReports(forDate?: string): Promise<{
   notificationsCreated: number;
 }> {
   const targetDate = forDate || getTodayISTDateString();
-  const vans = await getVans();
+  const [vans, todayReports, admins, adminTokens] = await Promise.all([
+    getVans(),
+    getReports({ startDate: targetDate, endDate: targetDate }),
+    getActiveAdminUsers(),
+    getAdminDeviceTokens(),
+  ]);
+
   const activeVans = vans.filter((v) => v.status === 'ACTIVE');
-  const todayReports = await getReports({ startDate: targetDate, endDate: targetDate });
-
-  const allUsers = await getAllUsers();
-  const admins = allUsers.filter((u) => u.role === 'ADMIN' && u.is_active);
-
   const pendingVans: string[] = [];
-  let notificationsCreated = 0;
+  const notificationsToCreate: Array<{
+    user_id: string;
+    title: string;
+    message: string;
+    type: string;
+    metadata: any;
+  }> = [];
 
   for (const van of activeVans) {
     const hasSubmitted = todayReports.some((r) => r.van_id === van.id);
     if (!hasSubmitted) {
       pendingVans.push(van.van_number);
 
-      // Check if we already sent a pending notification for this van today to avoid duplicates!
-      // In-app check:
+      // Queue in-app notifications for admins
       for (const admin of admins) {
-        // Create title and message
-        const title = '⚠ Daily Report Pending';
-        const message = `${van.van_number} (${van.registration_number}) has not submitted today's report.`;
-
-        await createNotification({
+        notificationsToCreate.push({
           user_id: admin.id,
-          title,
-          message,
+          title: '⚠ Daily Report Pending',
+          message: `${van.van_number} (${van.registration_number}) has not submitted today's report.`,
           type: 'DAILY_REPORT_PENDING',
           metadata: {
             vanId: van.id,
@@ -127,11 +130,9 @@ export async function checkAndNotifyPendingReports(forDate?: string): Promise<{
             date: targetDate,
           },
         });
-        notificationsCreated++;
       }
 
       // Also dispatch push notification
-      const adminTokens = await getAdminDeviceTokens();
       if (adminTokens.length > 0) {
         await sendMulticastNotification(adminTokens, {
           title: '⚠ Daily Report Pending',
@@ -144,6 +145,11 @@ export async function checkAndNotifyPendingReports(forDate?: string): Promise<{
         });
       }
     }
+  }
+
+  let notificationsCreated = 0;
+  if (notificationsToCreate.length > 0) {
+    notificationsCreated = await createNotificationsBatch(notificationsToCreate);
   }
 
   if (pendingVans.length > 0) {

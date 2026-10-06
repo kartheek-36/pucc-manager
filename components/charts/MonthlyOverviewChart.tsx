@@ -204,7 +204,7 @@ export function MonthlyOverviewChart({ initialData }: MonthlyOverviewChartProps)
             Best Performing Van
           </span>
           <p className="text-sm font-bold text-[#111827] mt-0.5">
-            {displayData?.best_van?.van_number || 'Van 02'} — {formatINR(displayData?.best_van?.collection ?? 0)}
+            {displayData?.best_van?.van_number || 'srisai'} — {formatINR(displayData?.best_van?.collection ?? 0)}
           </p>
         </div>
         <p className="text-xs text-[#6B7280]">

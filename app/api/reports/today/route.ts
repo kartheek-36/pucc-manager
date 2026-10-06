@@ -26,8 +26,10 @@ export async function GET(req: NextRequest) {
       return errorResponse('BAD_REQUEST', 'van_id parameter is required', 400);
     }
 
-    const report = await getDailyReportByVanAndDate(vanId, todayStr);
-    const van = await getVanById(vanId);
+    const [report, van] = await Promise.all([
+      getDailyReportByVanAndDate(vanId, todayStr),
+      getVanById(vanId),
+    ]);
 
     return successResponse({
       today_date: todayStr,

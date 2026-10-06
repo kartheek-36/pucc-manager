@@ -21,9 +21,9 @@ interface VanLayoutProps {
 
 export function VanLayout({
   children,
-  vanNumber = 'Van 01',
+  vanNumber = 'umamaheswara',
   registrationNumber = 'MH-12-PUC-1001',
-  operatorName = 'Van Operator',
+  operatorName = 'umamaheswara',
 }: VanLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();

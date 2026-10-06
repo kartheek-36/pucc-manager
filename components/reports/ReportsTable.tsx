@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { DailyReport } from '@/types';
 import { formatINR } from '@/lib/calculations/financial';
 import { FileSpreadsheet, FileText, Eye } from 'lucide-react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { useToast } from '../ui/Toast';
 
 interface ReportsTableProps {
@@ -65,13 +63,19 @@ export function ReportsTable({ reports, loading }: ReportsTableProps) {
     toast('CSV file downloaded successfully!', 'success');
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (!reports || reports.length === 0) {
       toast('No reports to export', 'info');
       return;
     }
 
     try {
+      const [{ jsPDF }, autoTableModule] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
+      const autoTable = (autoTableModule.default || autoTableModule) as any;
+
       const doc = new jsPDF({ orientation: 'landscape' });
       doc.setFontSize(14);
       doc.text('RTO Pollution Van Manager - Daily Reports', 14, 15);

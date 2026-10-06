@@ -18,12 +18,14 @@ export async function GET(req: NextRequest) {
     const startDate = last7Days[last7Days.length - 1];
     const endDate = last7Days[0];
 
-    const vans = await getVans();
-    const reports = await getReports({
-      startDate,
-      endDate,
-      van_id: vanId || undefined,
-    });
+    const [vans, reports] = await Promise.all([
+      getVans(),
+      getReports({
+        startDate,
+        endDate,
+        van_id: vanId || undefined,
+      }),
+    ]);
 
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -81,7 +83,7 @@ export async function GET(req: NextRequest) {
         vanTotals[v.van_number] = (vanTotals[v.van_number] || 0) + r.total_collection;
       }
     }
-    let bestVan = 'Van 01';
+    let bestVan = vans[0]?.van_number || 'umamaheswara';
     let bestVanAmount = 0;
     for (const [vName, col] of Object.entries(vanTotals)) {
       if (col > bestVanAmount) {

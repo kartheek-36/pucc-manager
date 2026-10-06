@@ -53,13 +53,27 @@ export function WeeklyOverviewChart({
   vanRanking,
   days,
 }: WeeklyOverviewProps) {
-  const [selectedVan, setSelectedVan] = useState<'ALL' | 'Van 01' | 'Van 02' | 'Van 03'>('ALL');
+  const [selectedVan, setSelectedVan] = useState<string>('ALL');
+
+  const availableVans = React.useMemo(() => {
+    if (vanRanking && vanRanking.length > 0) {
+      return vanRanking.map((v) => v.van_number);
+    }
+    return ['umamaheswara', 'srisai', 'srivenkateswara'];
+  }, [vanRanking]);
 
   const chartData = days.map((d) => {
     let value = d.total_collection;
-    if (selectedVan === 'Van 01') value = d.van_01_collection ?? 0;
-    if (selectedVan === 'Van 02') value = d.van_02_collection ?? 0;
-    if (selectedVan === 'Van 03') value = d.van_03_collection ?? 0;
+    if (selectedVan !== 'ALL') {
+      const idx = availableVans.indexOf(selectedVan);
+      if (idx === 0 || selectedVan === 'umamaheswara' || selectedVan === 'Van 01') {
+        value = d.van_01_collection ?? 0;
+      } else if (idx === 1 || selectedVan === 'srisai' || selectedVan === 'Van 02') {
+        value = d.van_02_collection ?? 0;
+      } else if (idx === 2 || selectedVan === 'srivenkateswara' || selectedVan === 'Van 03') {
+        value = d.van_03_collection ?? 0;
+      }
+    }
 
     return {
       date: d.date,
@@ -70,9 +84,9 @@ export function WeeklyOverviewChart({
   });
 
   const defaultRanking = [
-    { rank: 1, van_number: 'Van 02', collection: Math.round(totalCollection * 0.4), tests: Math.round(totalTests * 0.4) },
-    { rank: 2, van_number: 'Van 01', collection: Math.round(totalCollection * 0.35), tests: Math.round(totalTests * 0.35) },
-    { rank: 3, van_number: 'Van 03', collection: Math.round(totalCollection * 0.25), tests: Math.round(totalTests * 0.25) },
+    { rank: 1, van_number: 'srisai', collection: Math.round(totalCollection * 0.4), tests: Math.round(totalTests * 0.4) },
+    { rank: 2, van_number: 'umamaheswara', collection: Math.round(totalCollection * 0.35), tests: Math.round(totalTests * 0.35) },
+    { rank: 3, van_number: 'srivenkateswara', collection: Math.round(totalCollection * 0.25), tests: Math.round(totalTests * 0.25) },
   ];
   const rankings = vanRanking && vanRanking.length > 0 ? vanRanking : defaultRanking;
 
@@ -101,12 +115,12 @@ export function WeeklyOverviewChart({
         </div>
 
         {/* Filter Pills */}
-        <div className="flex items-center gap-1 bg-[#F7F8FA] p-1 rounded-lg border border-[#E7E9ED] self-start sm:self-auto text-xs font-medium">
-          {(['ALL', 'Van 01', 'Van 02', 'Van 03'] as const).map((filter) => (
+        <div className="flex items-center gap-1 bg-[#F7F8FA] p-1 rounded-lg border border-[#E7E9ED] self-start sm:self-auto text-xs font-medium overflow-x-auto max-w-full">
+          {['ALL', ...availableVans].map((filter) => (
             <button
               key={filter}
               onClick={() => setSelectedVan(filter)}
-              className={`px-2.5 py-1 rounded-md transition-colors ${
+              className={`px-2.5 py-1 rounded-md transition-colors whitespace-nowrap capitalize ${
                 selectedVan === filter
                   ? 'bg-[#FFFFFF] text-[#1D4ED8] font-semibold shadow-xs border border-[#E7E9ED]'
                   : 'text-[#6B7280] hover:text-[#111827]'

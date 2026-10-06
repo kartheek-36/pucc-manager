@@ -26,28 +26,30 @@ export default function VanDashboardPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const meRes = await fetch('/api/auth/me');
-      const meJson = await meRes.json();
-      if (!meJson.success) return;
-      setUser(meJson.data.user);
+      const [meRes, repRes, histRes] = await Promise.all([
+        fetch('/api/auth/me'),
+        fetch('/api/reports/today'),
+        fetch('/api/reports?limit=7'),
+      ]);
 
-      const vanId = meJson.data.user.van_id;
-      if (!vanId) return;
+      const [meJson, repJson, histJson] = await Promise.all([
+        meRes.json(),
+        repRes.json(),
+        histRes.json(),
+      ]);
 
-      const repRes = await fetch(`/api/reports/today?van_id=${vanId}`);
-      const repJson = await repRes.json();
+      if (meJson.success) {
+        setUser(meJson.data.user);
+      }
       if (repJson.success) {
         setVan(repJson.data.van);
         setTodayReport(repJson.data.report);
       }
-
-      const histRes = await fetch(`/api/reports?van_id=${vanId}&limit=7`);
-      const histJson = await histRes.json();
       if (histJson.success) {
         setRecentReports(histJson.data);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Failed to load van dashboard data:', e);
     } finally {
       setLoading(false);
     }

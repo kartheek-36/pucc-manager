@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { authenticateRequest, requireAdmin } from '@/lib/auth/session';
+import { authenticateRequest, requireAdmin, invalidateSessionCache } from '@/lib/auth/session';
 import { getVans, getReports, updateVan, createAuditLog } from '@/lib/db';
 import {
   getTodayISTDateString,
@@ -17,14 +17,14 @@ export async function GET(req: NextRequest) {
       return errorResponse('FORBIDDEN', 'Admin privileges required', 403);
     }
 
-    const vans = await getVans();
     const todayStr = getTodayISTDateString();
     const last7Days = getLast7DaysIST();
     const monthRange = getCurrentMonthISTRange();
 
-    const allReports = await getReports({
-      startDate: monthRange.start,
-    });
+    const [vans, allReports] = await Promise.all([
+      getVans(),
+      getReports({ startDate: monthRange.start }),
+    ]);
 
     const vanSummaries = vans.map((van) => {
       const vanReports = allReports.filter((r) => r.van_id === van.id);
@@ -96,6 +96,8 @@ export async function PUT(req: NextRequest) {
     if (!updated) {
       return errorResponse('NOT_FOUND', 'Van not found', 404);
     }
+
+    invalidateSessionCache();
 
     await createAuditLog({
       user_id: auth.user.id,

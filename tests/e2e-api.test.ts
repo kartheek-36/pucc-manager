@@ -145,7 +145,7 @@ async function runE2ETests() {
   console.log('\n▶ 6. Admin creates new operator with assigned van');
   let createdOperatorId = '';
   {
-    const van3 = allVans.find((v) => v.van_number === 'Van 03');
+    const van3 = allVans.find((v) => v.van_number === 'srivenkateswara' || v.van_number === 'Van 03') || allVans[2];
     const res = await fetch(`${BASE_URL}/api/admin/users`, {
       method: 'POST',
       headers: {
@@ -175,7 +175,7 @@ async function runE2ETests() {
   // STEP 7: Admin reassigns operator to Van 02
   console.log('\n▶ 7. Admin updates operator van assignment via PUT');
   {
-    const van2 = allVans.find((v) => v.van_number === 'Van 02');
+    const van2 = allVans.find((v) => v.van_number === 'srisai' || v.van_number === 'Van 02') || allVans[1];
     const res = await fetch(`${BASE_URL}/api/admin/users`, {
       method: 'PUT',
       headers: {

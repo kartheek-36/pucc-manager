@@ -8,6 +8,28 @@ export interface AuthContext {
   role: Role;
 }
 
+interface CachedSession {
+  auth: AuthContext;
+  expiresAt: number;
+}
+
+// In-memory fast cache for active sessions (60-second TTL)
+// Drastically speeds up repeated API polling by eliminating redundant cryptographic verification & DB queries
+const sessionCache = new Map<string, CachedSession>();
+const CACHE_TTL_MS = 60 * 1000;
+
+export function invalidateSessionCache(userId?: string) {
+  if (!userId) {
+    sessionCache.clear();
+    return;
+  }
+  for (const [token, cached] of sessionCache.entries()) {
+    if (cached.auth.user.id === userId) {
+      sessionCache.delete(token);
+    }
+  }
+}
+
 /**
  * Authenticate a request on the server via Bearer token or Cookie
  * Determines user identity and role solely on the server side!
@@ -38,6 +60,13 @@ export async function authenticateRequest(req: Request | NextRequest): Promise<A
     return null;
   }
 
+  // Fast-path: Check memory session cache
+  const now = Date.now();
+  const cached = sessionCache.get(token);
+  if (cached && cached.expiresAt > now) {
+    return cached.auth;
+  }
+
   // 3. Verify token with Firebase Admin
   const decodedToken = await verifyIdToken(token);
   if (!decodedToken) {
@@ -57,10 +86,26 @@ export async function authenticateRequest(req: Request | NextRequest): Promise<A
     return null;
   }
 
-  return {
+  const authContext: AuthContext = {
     user,
     role: user.role,
   };
+
+  // Cache valid session
+  const tokenExpMs = decodedToken.exp ? decodedToken.exp * 1000 : now + CACHE_TTL_MS;
+  const ttlMs = Math.min(CACHE_TTL_MS, Math.max(1000, tokenExpMs - now));
+  sessionCache.set(token, {
+    auth: authContext,
+    expiresAt: now + ttlMs,
+  });
+
+  // Limit cache size to avoid unbounded memory usage
+  if (sessionCache.size > 200) {
+    const firstKey = sessionCache.keys().next().value;
+    if (firstKey) sessionCache.delete(firstKey);
+  }
+
+  return authContext;
 }
 
 /**

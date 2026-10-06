@@ -2,10 +2,16 @@ import { getApps, initializeApp, cert, getApp, App } from 'firebase-admin/app';
 import { getAuth, DecodedIdToken } from 'firebase-admin/auth';
 import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
 
-// Initialize Firebase Admin singleton
-function getFirebaseAdminApp(): App {
+// Firebase Admin singletons to avoid repeated initialization
+let adminApp: App | null = null;
+let authInstance: ReturnType<typeof getAuth> | null = null;
+let messagingInstance: ReturnType<typeof getMessaging> | null = null;
+
+export function getFirebaseAdminApp(): App {
+  if (adminApp) return adminApp;
   if (getApps().length > 0) {
-    return getApp();
+    adminApp = getApp();
+    return adminApp;
   }
 
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -16,24 +22,42 @@ function getFirebaseAdminApp(): App {
     : undefined;
 
   if (projectId && clientEmail && privateKey) {
-    return initializeApp({
+    adminApp = initializeApp({
       credential: cert({
         projectId,
         clientEmail,
         privateKey,
       }),
     });
+    return adminApp;
   }
 
   // Fallback to default credentials or mock initialization in development
   try {
-    return initializeApp({
+    adminApp = initializeApp({
       projectId: projectId || 'rto-van-manager',
     });
+    return adminApp;
   } catch (e) {
-    return getApp();
+    adminApp = getApp();
+    return adminApp;
   }
 }
+
+export function getAdminAuth() {
+  if (!authInstance) {
+    authInstance = getAuth(getFirebaseAdminApp());
+  }
+  return authInstance;
+}
+
+export function getAdminMessaging() {
+  if (!messagingInstance) {
+    messagingInstance = getMessaging(getFirebaseAdminApp());
+  }
+  return messagingInstance;
+}
+
 
 /**
  * Verify a Firebase ID token on the server
@@ -75,8 +99,7 @@ export async function verifyIdToken(idToken: string): Promise<DecodedIdToken | n
   }
 
   try {
-    const app = getFirebaseAdminApp();
-    const auth = getAuth(app);
+    const auth = getAdminAuth();
     return await auth.verifyIdToken(idToken);
   } catch (error: any) {
     console.error('Error verifying Firebase ID token:', error.message);
@@ -100,8 +123,7 @@ export async function sendMulticastNotification(
   }
 
   try {
-    const app = getFirebaseAdminApp();
-    const messaging = getMessaging(app);
+    const messaging = getAdminMessaging();
 
     const message: MulticastMessage = {
       tokens,

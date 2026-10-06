@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/auth/session';
-import { getNotifications } from '@/lib/db';
+import { getNotifications, getUnreadNotificationCount } from '@/lib/db';
 import { successResponse, errorResponse } from '@/lib/api/response';
 
 export async function GET(req: NextRequest) {
@@ -13,9 +13,20 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const unreadOnly = searchParams.get('unread') === 'true';
 
-    const list = await getNotifications(auth.user.id, unreadOnly);
-    const allNotifications = await getNotifications(auth.user.id, false);
-    const unreadCount = allNotifications.filter((n) => !n.is_read).length;
+    let list;
+    let unreadCount = 0;
+
+    if (unreadOnly) {
+      const [unreadList, count] = await Promise.all([
+        getNotifications(auth.user.id, true),
+        getUnreadNotificationCount(auth.user.id),
+      ]);
+      list = unreadList;
+      unreadCount = count;
+    } else {
+      list = await getNotifications(auth.user.id, false);
+      unreadCount = list.filter((n) => !n.is_read).length;
+    }
 
     return successResponse({
       notifications: list,

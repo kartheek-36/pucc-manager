@@ -8,6 +8,8 @@ export const prisma =
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+// Retain on globalThis across hot-reloads and warm serverless containers to avoid connection pool exhaustion
+globalForPrisma.prisma = prisma;
 
 export default prisma;
+

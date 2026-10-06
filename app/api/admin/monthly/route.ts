@@ -23,12 +23,14 @@ export async function GET(req: NextRequest) {
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
 
-    const vans = await getVans();
-    const reports = await getReports({
-      startDate,
-      endDate,
-      van_id: vanId,
-    });
+    const [vans, reports] = await Promise.all([
+      getVans(),
+      getReports({
+        startDate,
+        endDate,
+        van_id: vanId,
+      }),
+    ]);
 
     let totalCollection = 0;
     let totalExpenses = 0;
@@ -65,7 +67,7 @@ export async function GET(req: NextRequest) {
         vanTotals[v.van_number] = (vanTotals[v.van_number] || 0) + r.total_collection;
       }
     }
-    let bestVan = 'Van 01';
+    let bestVan = vans[0]?.van_number || 'umamaheswara';
     let bestVanAmount = 0;
     for (const [vName, col] of Object.entries(vanTotals)) {
       if (col > bestVanAmount) {
