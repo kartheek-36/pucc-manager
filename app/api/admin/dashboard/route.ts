@@ -55,10 +55,20 @@ export async function GET(req: NextRequest) {
     });
 
     const sanitizedDbErr = (lastDbErr || 'none').replace(/[\r\n]+/g, ' ').substring(0, 100);
+    let dbHost = 'none';
+    try {
+      if (process.env.DATABASE_URL) {
+        const u = new URL(process.env.DATABASE_URL);
+        dbHost = `${u.hostname}:${u.port}`;
+      }
+    } catch {
+      dbHost = 'invalid_url';
+    }
 
     return successResponse(data, 200, {
       'X-Request-Id': requestId,
       'X-DB-Source': isDbConnected ? 'PostgreSQL' : 'MemoryStoreFallback',
+      'X-DB-Host': dbHost,
       'X-DB-Error': sanitizedDbErr,
     });
   } catch (error: any) {
