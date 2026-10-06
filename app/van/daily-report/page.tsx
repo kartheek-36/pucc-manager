@@ -8,7 +8,6 @@ import { getTodayISTDateString } from '@/lib/calculations/financial';
 import { MetricCardSkeleton } from '@/components/ui/Skeleton';
 import { AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useSyncListener } from '@/lib/sync/client';
 
 export default function VanDailyReportPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -17,9 +16,12 @@ export default function VanDailyReportPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const loadData = React.useCallback(async () => {
+  const loadData = React.useCallback(async (isBackground = false) => {
     try {
-      setLoading(true);
+      // NEVER set loading(true) during background refreshes to prevent unmounting the active form
+      if (!isBackground) {
+        setLoading(true);
+      }
       setErrorMessage(null);
 
       const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
@@ -49,15 +51,19 @@ export default function VanDailyReportPage() {
       }
     } catch (e: any) {
       console.error(e);
-      setErrorMessage('Network error while connecting to fleet database');
+      if (!isBackground) {
+        setErrorMessage('Network error while connecting to fleet database');
+      }
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   }, []);
 
-  useSyncListener(() => {
-    loadData();
-  }, { intervalMs: 8000 });
+  useEffect(() => {
+    loadData(false);
+  }, [loadData]);
 
   return (
     <VanLayout
@@ -95,7 +101,12 @@ export default function VanDailyReportPage() {
           <DailyReportForm
             van={van}
             existingReport={existingReport}
-            onSubmitted={() => loadData()}
+            onSubmitted={(savedReport) => {
+              // Update existing report reference without unmounting the form or reloading the page
+              if (savedReport) {
+                setExistingReport(savedReport);
+              }
+            }}
           />
         ) : null}
       </div>

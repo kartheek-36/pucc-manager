@@ -33,7 +33,7 @@ interface DailyReportFormProps {
   availableVans?: Van[];
   existingReport?: DailyReport | null;
   onVanSelect?: (vanId: string) => void;
-  onSubmitted?: () => void;
+  onSubmitted?: (report?: DailyReport) => void;
 }
 
 interface FormValues {
@@ -84,10 +84,13 @@ export function DailyReportForm({
     },
   });
 
-  // Re-sync form default values if van or existingReport changes
+  const lastSyncedReportIdRef = React.useRef<string | null>(existingReport?.id || null);
+
+  // Re-sync form default values only if van or existingReport id actually changes
   useEffect(() => {
     setValue('van_id', van.id);
-    if (existingReport) {
+    if (existingReport && existingReport.id !== lastSyncedReportIdRef.current) {
+      lastSyncedReportIdRef.current = existingReport.id;
       setValue('petrol_tests', existingReport.petrol_tests);
       setValue('diesel_tests', existingReport.diesel_tests);
       setValue('other_tests', existingReport.other_tests);
@@ -135,7 +138,8 @@ export function DailyReportForm({
     setValue('expenses', 0, { shouldValidate: true });
   };
 
-  const onSubmit = async (values: FormValues) => {
+  const onSubmit = async (values: FormValues, e?: React.BaseSyntheticEvent) => {
+    e?.preventDefault();
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -164,7 +168,7 @@ export function DailyReportForm({
         reportId: json.data?.id,
         reportDate: values.report_date,
       });
-      if (onSubmitted) onSubmitted();
+      if (onSubmitted) onSubmitted(json.data);
     } catch {
       toast('Network error while submitting report', 'error');
     } finally {
